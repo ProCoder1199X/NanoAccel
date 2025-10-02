@@ -1,0 +1,4 @@
+torch
+transformers
+bitsandbytes
+accelerate  # For better CPU dispatch
