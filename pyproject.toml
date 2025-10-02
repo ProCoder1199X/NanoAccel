@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nanoaccel"
+version = "0.1.0"
+authors = [{ name = "Dheeraj Kumar", email = "dheeraj.kumar@example.com" }]
+description = "CPU-optimized LLM inference library"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+]
+dependencies = [
+    "torch",
+    "transformers",
+    "bitsandbytes",
+    "accelerate",
+]
+
+[project.urls]
+Homepage = "https://github.com/ProCoder1199X/NanoAccel"
+Issues = "https://github.com/ProCoder1199X/NanoAccel/issues"
