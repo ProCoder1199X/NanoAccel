@@ -1,0 +1,43 @@
+# NanoAccel Configuration Example
+# This file demonstrates various configuration options
+
+model:
+  default_model: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+  default_draft_model: "EleutherAI/pythia-70m"
+  cache_dir: null  # Use default cache directory
+  trust_remote_code: false
+
+quantization:
+  enabled: true
+  quant_type: "int4"  # Options: int2, int4, int8
+  compute_dtype: "float32"  # Options: float32, bfloat16
+  chunk_size: 1024
+
+generation:
+  max_tokens: 100
+  temperature: 0.8
+  top_p: 0.9
+  top_k: 50
+  do_sample: true
+
+speculative_decoding:
+  enabled: true
+  gamma: 4  # Number of speculative tokens
+  early_exit_threshold: 0.9
+  use_efficiency_cores: true
+
+system:
+  cpu_optimization: true
+  mixed_precision: true
+  num_threads: null  # Auto-detect
+  memory_fraction: 0.8
+
+logging:
+  level: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: null  # Log to console
+
+cache:
+  enabled: true
+  cache_dir: null  # Use default cache directory
+  max_size_gb: 10

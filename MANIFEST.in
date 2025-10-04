@@ -1,4 +1,9 @@
 include README.md
-include LICENSE
+include LICENSE.txt
 include requirements.txt
+include CONTRIBUTING.md
+include Makefile
+include .pre-commit-config.yaml
 recursive-include nanoaccel *.py
+recursive-include examples *.py *.yaml *.yml
+recursive-include tests *.py
