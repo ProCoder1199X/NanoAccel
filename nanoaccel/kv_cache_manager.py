@@ -142,4 +142,112 @@ class KVCacheManager:
         entry.timestamp = time.time()
         self.cache.move_to_end(key)
         
-        # Decompress if
+        # Decompress if needed
+        if entry.compressed:
+            self._decompress_entry(entry)
+        
+        return entry.value.clone()
+    
+    def _decompress_entry(self, entry: CacheEntry):
+        """Decompress a cache entry."""
+        if not entry.compressed or not entry.compressed_data:
+            return
+        
+        try:
+            decompressed = zlib.decompress(entry.compressed_data)
+            tensor_data = pickle.loads(decompressed)
+            entry.value = tensor_data
+            entry.compressed = False
+            entry.compressed_data = None
+            self.stats["decompressions"] += 1
+        except Exception as e:
+            logger.error(f"Error decompressing cache entry: {e}")
+    
+    def _compress_entry(self, entry: CacheEntry):
+        """Compress a cache entry to save memory."""
+        if entry.compressed or entry.original_size < self.compression_threshold_bytes:
+            return
+        
+        try:
+            tensor_bytes = pickle.dumps(entry.value)
+            compressed = zlib.compress(tensor_bytes, level=self.compression_level)
+            
+            # Only keep compression if it saves space
+            if len(compressed) < entry.original_size * 0.8:
+                entry.compressed_data = compressed
+                entry.compressed = True
+                entry.value = None
+                self.stats["compressions"] += 1
+        except Exception as e:
+            logger.error(f"Error compressing cache entry: {e}")
+    
+    def _evict_one(self):
+        """Evict one entry based on strategy."""
+        if not self.cache:
+            return
+        
+        if self.eviction_strategy == "lru":
+            # Remove least recently used
+            key, entry = self.cache.popitem(last=False)
+        elif self.eviction_strategy == "lfu":
+            # Remove least frequently used
+            min_key = min(self.cache.keys(), 
+                         key=lambda k: self.cache[k].access_count)
+            entry = self.cache.pop(min_key)
+        else:  # hybrid
+            # Hybrid: Consider both frequency and recency
+            now = time.time()
+            min_key = min(self.cache.keys(),
+                         key=lambda k: (self.cache[k].access_count / 
+                                      (now - self.cache[k].timestamp + 1)))
+            entry = self.cache.pop(min_key)
+        
+        self.current_size_bytes -= entry.original_size
+        self.stats["evictions"] += 1
+    
+    def compress_cold_entries(self, age_threshold_seconds: float = 60.0):
+        """Compress entries that haven't been accessed recently."""
+        if not self.compression_enabled:
+            return
+        
+        now = time.time()
+        for entry in self.cache.values():
+            if not entry.compressed and (now - entry.timestamp) > age_threshold_seconds:
+                self._compress_entry(entry)
+    
+    def prefetch(self, keys: List[str]):
+        """Prefetch and decompress entries for faster access."""
+        for key in keys:
+            if key in self.cache:
+                entry = self.cache[key]
+                if entry.compressed:
+                    self._decompress_entry(entry)
+    
+    def clear(self):
+        """Clear all cache entries."""
+        self.cache.clear()
+        self.current_size_bytes = 0
+        self.stats["total_size_bytes"] = 0
+    
+    def get_stats(self) -> Dict[str, int]:
+        """Get cache statistics."""
+        stats = self.stats.copy()
+        stats["cache_size"] = len(self.cache)
+        stats["hit_rate"] = (
+            self.stats["hits"] / (self.stats["hits"] + self.stats["misses"])
+            if (self.stats["hits"] + self.stats["misses"]) > 0 else 0
+        )
+        return stats
+    
+    def optimize(self):
+        """Run optimization on cache (compression, cleanup)."""
+        self.compress_cold_entries()
+        
+        # Remove empty or corrupted entries
+        to_remove = []
+        for key, entry in self.cache.items():
+            if entry.value is None and not entry.compressed:
+                to_remove.append(key)
+        
+        for key in to_remove:
+            self.cache.pop(key)
