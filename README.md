@@ -7,6 +7,8 @@
 
 NanoAccel is a production-ready, enterprise-grade Python library for accelerating inference and fine-tuning of 1B-8B parameter LLMs on low-end CPUs (e.g., i3/i5 with 8-16GB RAM), without GPUs or specialized hardware. Achieve **2-5x speedups** and **70%+ memory reduction** through advanced optimizations.
 
+please also check the optimization_guide.md!
+
 ## 🚀 Key Features
 
 ### Core Optimizations
