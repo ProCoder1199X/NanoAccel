@@ -627,30 +627,6 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 MIT License - see [LICENSE.txt](LICENSE.txt)
 
-## 🙏 Acknowledgments
 
-- HuggingFace Transformers team
-- PyTorch team
-- ONNX Runtime team
-- Community contributors
 
-## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/ProCoder1199X/NanoAccel/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/ProCoder1199X/NanoAccel/discussions)
-- **Email**: dheeraj.kumar@example.com
-
-## 🎯 Roadmap
-
-- [ ] INT2 quantization stabilization
-- [ ] Apple Silicon (M1/M2) optimizations
-- [ ] WebAssembly support
-- [ ] Model distillation toolkit
-- [ ] Auto-tuning for hardware
-- [ ] Multi-GPU support
-- [ ] LoRA fine-tuning support
-- [ ] Model quantization GUI
-
----
-
-**Star ⭐ this repo if NanoAccel helps you run LLMs on low-end hardware!**
