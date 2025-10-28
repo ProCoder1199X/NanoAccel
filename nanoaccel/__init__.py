@@ -7,7 +7,7 @@ of 1B-8B parameter LLMs on low-end CPUs without GPUs or specialized hardware.
 
 __version__ = "0.1.0"
 __author__ = "Dheeraj Kumar"
-__email__ = "dheeraj.kumar@example.com"
+__email__ = "dheeraj1018279@gmail.com"
 
 from .core import NanoAccel
 from .utils import detect_cpu_features, quantize_kv_cache

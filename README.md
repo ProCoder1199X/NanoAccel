@@ -9,7 +9,7 @@ NanoAccel is a lightweight Python library designed to accelerate inference and f
 ## 🚀 Features
 
 - **Ultra-low-bit quantization** (1-4 bit) for memory efficiency
-- **Speculative decoding** for faster token generation using smaller draft models
+- **Advanced speculative decoding** with adaptive gamma adjustment for optimal performance
 - **CPU scheduling optimizations** with performance/efficiency core pinning
 - **Memory management** with KV cache quantization and offloading
 - **Mixed precision inference** for improved performance
@@ -110,6 +110,10 @@ speculative_decoding:
   enabled: true
   gamma: 4
   early_exit_threshold: 0.9
+  adaptive_gamma: true
+  gamma_min: 1
+  gamma_max: 8
+  adaptation_window: 10
 
 system:
   cpu_optimization: true
@@ -151,6 +155,23 @@ result = nanoaccel.generate(
     gamma=6,  # Number of speculative tokens
     early_exit_threshold=0.95
 )
+
+# Advanced: Use adaptive gamma adjustment
+from nanoaccel.speculative import SpeculativeDecoding
+
+spec_decoder = SpeculativeDecoding(
+    draft_model_name="EleutherAI/pythia-70m",
+    gamma=4,
+    adaptive_gamma=True,  # Enable adaptive adjustment
+    gamma_min=1,
+    gamma_max=8,
+    adaptation_window=10
+)
+
+# Monitor adaptive statistics
+adaptive_stats = spec_decoder.get_adaptive_stats()
+print(f"Current gamma: {adaptive_stats['current_gamma']}")
+print(f"Recent acceptance rates: {adaptive_stats['recent_acceptance_rates']}")
 ```
 
 ### Performance Monitoring

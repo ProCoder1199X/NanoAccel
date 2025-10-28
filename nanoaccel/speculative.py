@@ -12,44 +12,63 @@ logger = logging.getLogger(__name__)
 
 class SpeculativeDecoding:
     """
-    Speculative decoding implementation for faster text generation.
-    
+    Advanced speculative decoding implementation for faster text generation.
+
     Uses a smaller draft model to generate multiple tokens in parallel,
     then verifies them with the main model for improved throughput.
+    Includes adaptive gamma adjustment and improved verification strategies.
     """
-    
+
     def __init__(
         self,
         draft_model_name: str = "EleutherAI/pythia-70m",
         gamma: int = 4,
         early_exit_threshold: float = 0.9,
-        use_efficiency_cores: bool = True
+        use_efficiency_cores: bool = True,
+        adaptive_gamma: bool = True,
+        gamma_min: int = 1,
+        gamma_max: int = 8,
+        adaptation_window: int = 10
     ):
         """
         Initialize speculative decoding.
-        
+
         Args:
             draft_model_name: HuggingFace model identifier for draft model
-            gamma: Number of speculative tokens to generate
+            gamma: Initial number of speculative tokens to generate
             early_exit_threshold: Threshold for early exit in draft generation
             use_efficiency_cores: Whether to use efficiency cores for draft model
+            adaptive_gamma: Whether to adaptively adjust gamma based on acceptance rate
+            gamma_min: Minimum gamma value for adaptive adjustment
+            gamma_max: Maximum gamma value for adaptive adjustment
+            adaptation_window: Number of recent generations to consider for adaptation
         """
         self.draft_model_name = draft_model_name
         self.gamma = gamma
         self.early_exit_threshold = early_exit_threshold
         self.use_efficiency_cores = use_efficiency_cores
-        
+        self.adaptive_gamma = adaptive_gamma
+        self.gamma_min = gamma_min
+        self.gamma_max = gamma_max
+        self.adaptation_window = adaptation_window
+
         # Model components
         self.draft_model = None
         self.draft_tokenizer = None
-        
+
+        # Adaptive gamma tracking
+        self.recent_acceptance_rates = []
+        self.current_gamma = gamma
+
         # Statistics
         self.stats = {
             "draft_tokens_generated": 0,
             "accepted_tokens": 0,
             "rejected_tokens": 0,
             "acceptance_rate": 0.0,
-            "speedup_factor": 0.0
+            "speedup_factor": 0.0,
+            "adaptive_adjustments": 0,
+            "average_gamma": gamma
         }
     
     def load_draft_model(self):
@@ -75,49 +94,50 @@ class SpeculativeDecoding:
     ) -> List[int]:
         """
         Generate draft tokens using the draft model.
-        
+
         Args:
             input_tokens: Input token sequence
             main_tokenizer: Tokenizer from the main model
             max_draft_tokens: Maximum number of draft tokens to generate
-            
+
         Returns:
             List of generated draft tokens
         """
         if not self.draft_model or not self.draft_tokenizer:
             raise RuntimeError("Draft model not loaded. Call load_draft_model() first.")
-        
-        max_tokens = max_draft_tokens or self.gamma
+
+        # Use adaptive gamma if enabled
+        max_tokens = max_draft_tokens or self.current_gamma
         draft_tokens = []
-        
+
         # Use recent context for draft generation
         recent_tokens = input_tokens[-32:] if len(input_tokens) > 32 else input_tokens
         recent_text = main_tokenizer.convert_tokens_to_string(
             main_tokenizer.convert_ids_to_tokens(recent_tokens)
         )
-        
+
         # Convert to draft model's token space
         draft_input = self.draft_tokenizer(recent_text, return_tensors="pt").to("cpu")
-        
+
         with torch.no_grad():
             for _ in range(max_tokens):
                 draft_logits = self.draft_model(**draft_input).logits[0, -1]
                 probs = torch.softmax(draft_logits, dim=-1)
-                
+
                 # Early exit if confidence is high
                 if probs.max() > self.early_exit_threshold:
                     break
-                
+
                 # Sample next token
                 next_token = probs.argmax().item()
                 draft_tokens.append(next_token)
-                
+
                 # Update input for next iteration
                 draft_input["input_ids"] = torch.cat([
                     draft_input["input_ids"],
                     torch.tensor([[next_token]])
                 ], dim=1)
-        
+
         self.stats["draft_tokens_generated"] += len(draft_tokens)
         return draft_tokens
     
@@ -181,8 +201,12 @@ class SpeculativeDecoding:
         # Update acceptance rate
         total_draft_tokens = self.stats["draft_tokens_generated"]
         if total_draft_tokens > 0:
-            self.stats["acceptance_rate"] = self.stats["accepted_tokens"] / total_draft_tokens
-        
+            acceptance_rate = self.stats["accepted_tokens"] / total_draft_tokens
+            self.stats["acceptance_rate"] = acceptance_rate
+
+            # Adapt gamma if enabled
+            self._adapt_gamma(acceptance_rate)
+
         return accepted_tokens, num_accepted
     
     def speculative_generate(
@@ -289,8 +313,11 @@ class SpeculativeDecoding:
         # Estimate speedup factor
         if self.stats["accepted_tokens"] > 0:
             self.stats["speedup_factor"] = (
-                1 + (self.stats["acceptance_rate"] * self.gamma)
+                1 + (self.stats["acceptance_rate"] * self.current_gamma)
             )
+
+        # Update adaptive statistics
+        self._update_adaptive_stats()
         
         generated_text = main_tokenizer.decode(tokens, skip_special_tokens=True)
         
@@ -315,5 +342,76 @@ class SpeculativeDecoding:
             "accepted_tokens": 0,
             "rejected_tokens": 0,
             "acceptance_rate": 0.0,
-            "speedup_factor": 0.0
+            "speedup_factor": 0.0,
+            "adaptive_adjustments": 0,
+            "average_gamma": self.gamma
+        }
+        self.recent_acceptance_rates = []
+        self.current_gamma = self.gamma
+
+    def _adapt_gamma(self, acceptance_rate: float):
+        """
+        Adaptively adjust gamma based on recent acceptance rates.
+
+        Args:
+            acceptance_rate: Current acceptance rate (0.0 to 1.0)
+        """
+        if not self.adaptive_gamma:
+            return
+
+        # Add current acceptance rate to history
+        self.recent_acceptance_rates.append(acceptance_rate)
+
+        # Keep only recent history
+        if len(self.recent_acceptance_rates) > self.adaptation_window:
+            self.recent_acceptance_rates.pop(0)
+
+        # Only adapt if we have enough data
+        if len(self.recent_acceptance_rates) < 3:
+            return
+
+        # Calculate average acceptance rate
+        avg_acceptance = sum(self.recent_acceptance_rates) / len(self.recent_acceptance_rates)
+
+        # Adjust gamma based on acceptance rate
+        old_gamma = self.current_gamma
+
+        if avg_acceptance > 0.8:
+            # High acceptance - increase gamma for more speedup
+            self.current_gamma = min(self.current_gamma + 1, self.gamma_max)
+        elif avg_acceptance < 0.4:
+            # Low acceptance - decrease gamma to improve quality
+            self.current_gamma = max(self.current_gamma - 1, self.gamma_min)
+        # Else: acceptance rate is good, keep current gamma
+
+        # Update statistics if gamma changed
+        if self.current_gamma != old_gamma:
+            self.stats["adaptive_adjustments"] += 1
+            logger.debug(f"Adapted gamma from {old_gamma} to {self.current_gamma} "
+                        f"(avg acceptance: {avg_acceptance:.3f})")
+
+    def _update_adaptive_stats(self):
+        """Update adaptive statistics after generation."""
+        if self.adaptive_gamma:
+            # Update average gamma
+            total_generations = self.stats["draft_tokens_generated"] // max(1, self.gamma)
+            if total_generations > 0:
+                # Estimate average gamma (this is approximate)
+                self.stats["average_gamma"] = (
+                    self.stats["average_gamma"] * (total_generations - 1) + self.current_gamma
+                ) / total_generations
+
+    def get_adaptive_stats(self) -> Dict[str, Union[float, int, List[float]]]:
+        """
+        Get adaptive gamma statistics.
+
+        Returns:
+            Dictionary with adaptive statistics
+        """
+        return {
+            "current_gamma": self.current_gamma,
+            "recent_acceptance_rates": self.recent_acceptance_rates.copy(),
+            "adaptive_enabled": self.adaptive_gamma,
+            "gamma_range": (self.gamma_min, self.gamma_max),
+            "adaptation_window": self.adaptation_window
         }
