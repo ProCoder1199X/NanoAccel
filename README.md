@@ -15,7 +15,7 @@ NanoAccel is a lightweight Python library designed to accelerate inference and f
 - **Mixed precision inference** for improved performance
 - **Comprehensive CLI** with system requirement checking
 - **Configuration management** via YAML/JSON files and environment variables
-- **Compatible models**: TinyLlama, Gemma 2B, Llama 3.2 1B/3B, Pythia, and more
+- **Compatible models**: TinyLlama, Gemma 2B, Llama 3.2 1B/3B, Pythia, and more.
 
 ## 📦 Installation
 
